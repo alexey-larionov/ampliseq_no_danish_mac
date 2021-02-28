@@ -1,0 +1,236 @@
+---
+title: "s02_remove_nfe"
+author: "Alexey Larionov"
+date: "27 Feb 2021"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float: true
+editor_options:
+  chunk_output_type: console
+---
+
+# summary  
+
+Remove NFE cases and variants that had been detected in NFE cases only  
+
+Input data: 13,046 variants x 739 cases (541 BC and 198 NFE)  
+Output data: 12,276 variants x 541 cases  
+
+# start section
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+options(width = 999)
+```
+
+```{r}
+
+# Time stamp
+Sys.time()
+
+# Clenan-up
+rm(list=ls())
+graphics.off()
+
+# Memory
+gc()
+
+# Options
+options(stringsAsFactors = F,
+        warnPartialMatchArgs = T, 
+        warnPartialMatchAttr = T, 
+        warnPartialMatchDollar = T)
+
+# Files and folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s06_read_data")
+scripts_folder <- file.path(base_folder,"scripts","s06_read_data")
+setwd(scripts_folder)
+
+```
+
+# load data  
+
+```{r}
+
+load(file.path(data_folder, "s01_read_vcf_to_r.RData"))
+
+# Update folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s06_read_data")
+scripts_folder <- file.path(base_folder,"scripts","s06_read_data")
+
+```
+
+# check_data
+
+```{r}
+
+# List objects
+ls()
+
+# Check sizes
+dim(gt_add.mx)
+dim(gt_num.mx)
+dim(gt_chr.mx)
+dim(ref.mx)
+dim(alt.mx)
+
+dim(gq.mx)
+dim(dp.mx)
+
+dim(fixed.df)
+colnames(fixed.df)
+
+dim(meta.df)
+
+# Check consistence of rownames and colnames
+
+sum(rownames(gt_add.mx) != rownames(gt_num.mx))
+sum(rownames(gt_add.mx) != rownames(gt_chr.mx))
+sum(rownames(gt_add.mx) != rownames(ref.mx))
+sum(rownames(gt_add.mx) != rownames(alt.mx))
+sum(rownames(gt_add.mx) != rownames(gq.mx))
+sum(rownames(gt_add.mx) != rownames(dp.mx))
+
+sum(colnames(gt_add.mx) != colnames(gt_num.mx))
+sum(colnames(gt_add.mx) != colnames(gt_chr.mx))
+sum(colnames(gt_add.mx) != colnames(ref.mx))
+sum(colnames(gt_add.mx) != colnames(alt.mx))
+sum(colnames(gt_add.mx) != colnames(gq.mx))
+sum(colnames(gt_add.mx) != colnames(dp.mx))
+
+sum(rownames(gt_add.mx) != rownames(fixed.df))
+
+```
+
+# Remove NFE samples  
+
+```{r}
+
+head(colnames(gt_chr.mx))
+tail(colnames(gt_chr.mx))
+
+739-198
+colnames(gt_chr.mx)[541:542]
+
+ampliseq_samples <- c(1:541)
+nfe_samples <- c(542:739)
+
+length(ampliseq_samples)
+length(nfe_samples)
+
+colnames(gt_chr.mx)[ampliseq_samples]
+colnames(gt_chr.mx)[nfe_samples]
+
+gt_add.mx <- gt_add.mx[,ampliseq_samples]
+gt_num.mx <- gt_num.mx[,ampliseq_samples]
+gt_chr.mx <- gt_chr.mx[,ampliseq_samples]
+ref.mx <- ref.mx[,ampliseq_samples]
+alt.mx <- alt.mx[,ampliseq_samples]
+gq.mx <- gq.mx[,ampliseq_samples]
+dp.mx <- dp.mx[,ampliseq_samples]
+
+rm(ampliseq_samples,nfe_samples)
+
+```
+
+# Remove non-polymorphic sites  
+
+```{r}
+
+# Function to detect uniform numeric vector
+uniformity_check.udf <- function(x){
+  if (all(is.na(x))){"All_NA"}
+  else if (min(x,na.rm=T)==max(x,na.rm=T)){"Uniform"}
+  else {"Non-Uniform"}}
+
+# Make the filter
+uniformity_check <- apply(gt_add.mx,1,uniformity_check.udf)
+summary(as.factor(uniformity_check))
+non_uniform_sites <- uniformity_check == "Non-Uniform"
+
+# Apply filter
+gt_add.mx <- gt_add.mx[non_uniform_sites,]
+gt_num.mx <- gt_num.mx[non_uniform_sites,]
+gt_chr.mx <- gt_chr.mx[non_uniform_sites,]
+ref.mx <- ref.mx[non_uniform_sites,]
+alt.mx <- alt.mx[non_uniform_sites,]
+gq.mx <- gq.mx[non_uniform_sites,]
+dp.mx <- dp.mx[non_uniform_sites,]
+fixed.df <- fixed.df[non_uniform_sites,]
+
+# Clean-up
+rm(uniformity_check.udf, uniformity_check, non_uniform_sites)
+
+```
+
+# check_data
+
+```{r}
+
+# List objects
+ls()
+
+# Check sizes
+dim(gt_add.mx)
+dim(gt_num.mx)
+dim(gt_chr.mx)
+dim(ref.mx)
+dim(alt.mx)
+
+dim(gq.mx)
+dim(dp.mx)
+
+dim(fixed.df)
+dim(meta.df)
+
+# Check consistence of rownames and colnames
+
+sum(rownames(gt_add.mx) != rownames(gt_num.mx))
+sum(rownames(gt_add.mx) != rownames(gt_chr.mx))
+sum(rownames(gt_add.mx) != rownames(ref.mx))
+sum(rownames(gt_add.mx) != rownames(alt.mx))
+sum(rownames(gt_add.mx) != rownames(gq.mx))
+sum(rownames(gt_add.mx) != rownames(dp.mx))
+
+sum(colnames(gt_add.mx) != colnames(gt_num.mx))
+sum(colnames(gt_add.mx) != colnames(gt_chr.mx))
+sum(colnames(gt_add.mx) != colnames(ref.mx))
+sum(colnames(gt_add.mx) != colnames(alt.mx))
+sum(colnames(gt_add.mx) != colnames(gq.mx))
+sum(colnames(gt_add.mx) != colnames(dp.mx))
+
+sum(rownames(gt_add.mx) != rownames(fixed.df))
+
+```
+
+# save results
+
+```{r}
+
+save.image(file.path(data_folder, "s02_remove_nfe.RData"))
+
+```
+
+# final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+gc()
+
+```

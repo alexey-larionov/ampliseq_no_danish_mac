@@ -1,0 +1,20 @@
+# ignore everything
+#------------------
+*
+
+# don't ignore
+#-------------
+
+# folders (files ending with slash)
+!*/
+
+# specific files
+!.gitignore
+!README.md
+
+# files with specific extensions
+!*.sh
+!*.log
+!*.Rmd
+!*.html
+!*.R

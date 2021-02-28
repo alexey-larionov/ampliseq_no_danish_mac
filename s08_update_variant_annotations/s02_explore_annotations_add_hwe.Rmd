@@ -1,0 +1,294 @@
+---
+title: "Ampliseq: explore variant annotations, filter by HWE"
+author: "Alexey Larionov"
+date: "28 Feb 2021"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float: true
+editor_options:
+  chunk_output_type: console
+---
+
+# Summary
+
+Explore variants annotations and add HWE data  
+
+This changes number of annotations from 101 to 102  
+
+Only 92 of 3,765 variants have high impact  
+
+**Downsampling** was suppressed by the GATK pipeline  
+Somehow 45 of 3,765 variants happend to be down-sampled in at least one sample,  
+despite my explicit request fo not down-sampling during the dataanalysis.  
+However, this was a significant drop comparatively to Ampliseq-3 analysis,  
+where I did not suppress down-sampling and had 4,009 out of 4,164 variants down-sampled.  
+
+Because Inf was excluded in -log(ExcessHets) plotting, 
+the highest ExcessHets was not in the plots for variants violating HWE.  
+
+7 variants grossly violating HWE (p<10-5) have been excluded.  
+
+Input data: 3,765 vars x 535 Samples  
+Output data: 3,758 vars x 535 Samples  
+
+# Start section
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+options(width = 999)
+```
+
+```{r}
+
+# Time stamp
+Sys.time()
+
+# Clenan-up
+rm(list=ls())
+graphics.off()
+
+# Memory
+gc()
+
+# Options
+options(stringsAsFactors = F,
+        warnPartialMatchArgs = T, 
+        warnPartialMatchAttr = T, 
+        warnPartialMatchDollar = T)
+
+# Files and folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s08_update_variant_annotations")
+scripts_folder <- file.path(base_folder,"scripts","s08_update_variant_annotations")
+setwd(scripts_folder)
+
+# Libraries
+library(dplyr)
+library(HardyWeinberg)
+
+```
+
+# Read data
+
+```{r}
+
+load(file.path(data_folder,"s01_clean_variant_annotations.RData"))
+
+# Update folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s08_update_variant_annotations")
+scripts_folder <- file.path(base_folder,"scripts","s08_update_variant_annotations")
+
+```
+
+# Check data
+
+```{r}
+
+ls()
+
+# Dimentions
+dim(gt.mx)
+dim(vars.df)
+
+# Consistency
+sum(rownames(gt.mx) != rownames(vars.df))
+
+```
+
+# Accessory function to explore selected fields
+
+Splits field by a separator, and then counts entries  
+
+```{r}
+
+explore_field.udf <- function(field, field_separator){
+  a <- strsplit(as.vector(field),paste("\\",field_separator,sep=""))
+  b <- as.vector(unlist(a))
+  sort(table(b), decreasing = TRUE)
+}
+
+```
+
+# List of fields
+
+```{r}
+
+colnames(vars.df)
+str(vars.df, list.len=ncol(vars.df))
+
+```
+
+# Explore various variant annotation fields  
+
+```{r explore_vars}
+
+# VEP consequence & Impact
+explore_field.udf(vars.df$Consequence, "&")
+sort(table(vars.df$IMPACT), decreasing=T)
+
+# Were any of the variants downsampled?
+table(vars.df$DS) # How some variants happened to be down-sampled ???
+
+# InbreedingCoeff
+hist(vars.df$InbreedingCoeff, ylim=c(0,3500), lab=T)
+
+# ExcessHet
+hist(vars.df$ExcessHet, ylim=c(0,3500), lab=T)
+
+plot(-log10(vars.df$ExcessHet), main="- log10 ExcessHet", xlab="Variants")
+abline(h=3.8, col="red", lty=2)
+x <- which(-log10(vars.df$ExcessHet) > 3.8 & is.finite(-log10(vars.df$ExcessHet)))
+y <- -log10(vars.df$ExcessHet)[x]
+text(x, y, labels=vars.df$SplitVarID[x], 
+     pos=c(2,3,1,4,2), cex=0.5, offset=0.3)
+vars.df$SplitVarID[x]
+
+# MLEAF
+hist(as.numeric(vars.df$MLEAF),ylim=c(0,3600), lab=T)
+
+# MQ
+hist(vars.df$MQ,ylim=c(0,4000), lab=T)
+
+# MultiAllelic
+table(vars.df$Multiallelic)
+
+# NEGATIVE_TRAIN_SITE
+table(vars.df$NEGATIVE_TRAIN_SITE)
+
+# POSITIVE_TRAIN_SITE
+table(vars.df$POSITIVE_TRAIN_SITE)
+
+# SIFT Polyphen
+sort(table(vars.df$SIFT_call), decreasing=T)
+sort(table(vars.df$PolyPhen_call), decreasing=T)
+
+# VEP CLIN_SIG
+sort(table(vars.df$CLIN_SIG), decreasing=T)[1:15]
+sum(is.na(vars.df$CLIN_SIG))
+explore_field.udf(vars.df$CLIN_SIG, "&")
+
+# SYMBOL
+sum(is.na(vars.df$SYMBOL))
+
+# DISTANCE (Shortest distance from variant to transcript)
+hist(as.numeric(vars.df$DISTANCE), lab=T, ylim=c(0,12))
+table(as.numeric(vars.df$DISTANCE), useNA = "always")
+
+# STRAND
+table(vars.df$STRAND)
+
+# Clean-up
+rm(x,y,explore_field.udf)
+
+```
+
+# Add HWE data to biallelic variants  
+
+using library *HardyWeinberg*  
+
+```{r}
+
+# Prepare genotypes counts
+genotypes_counts <- MakeCounts(t(gt.mx),coding=c(0,1,2))
+dim(genotypes_counts)
+genotypes_counts[1:5,]
+
+# Calculate HWE p-values
+hwe <- HWExactStats(genotypes_counts[,1:3], verbose=FALSE)
+names(hwe) <- rownames(gt.mx)
+
+# Remove HWE p from multiallelic variants
+NA -> hwe[vars.df$Multiallelic]
+sum(is.na(hwe))
+
+# Explore HWE p-values
+length(hwe)
+hwe[1:5] 
+min(hwe, na.rm=T)
+max(hwe, na.rm=T)
+
+# Histogram HWE p-values
+hist(hwe)
+
+# Dot-plot HWE p-values
+plot(-log10(hwe), main="- log10 HWE", xlab="Variants")
+abline(h=5, col="red", lty=2)
+x <- which(-log10(hwe) > 5)
+y <- -log10(hwe)[x]
+text(x, y, labels=names(hwe)[x], 
+     pos=c(1,1,1,2,4,1,3), cex=0.5, offset=0.2)
+
+# Add hwe to vars.df
+vars.df <- cbind(vars.df, hwe_biallelic=hwe)
+colnames(vars.df)
+
+# Clean-up
+rm(genotypes_counts, hwe, x, y)
+
+```
+
+# Remove variants grossly violating HWE
+
+```{r}
+
+# Detect variants violating HWE
+hwe_violators <- vars.df$hwe_biallelic < 1e-5 & !is.na(vars.df$hwe_biallelic)
+sum(hwe_violators)
+
+# Explore variants violating HWE
+vars.df[hwe_violators,c("hwe_biallelic","ExcessHet")]
+
+# Remove variants violating HWE
+gt.mx <- gt.mx[!hwe_violators,]
+vars.df <- vars.df[!hwe_violators,]
+
+# Clean-up
+rm(hwe_violators)
+
+```
+
+# Check data
+
+```{r}
+
+ls()
+
+# Dimentions
+dim(gt.mx)
+dim(vars.df)
+
+# Consistency
+sum(rownames(gt.mx) != rownames(vars.df))
+
+```
+
+# Save result
+
+```{r}
+
+save.image(file.path(data_folder, "s02_explore_annotations_add_hwe.RData"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+gc()
+
+```
