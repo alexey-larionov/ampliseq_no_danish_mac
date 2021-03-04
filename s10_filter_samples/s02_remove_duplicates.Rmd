@@ -1,0 +1,227 @@
+---
+title: "Ampliseq: check duplicates"
+author: "Alexey Larionov"
+date: "03 Mar 2021"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float: true
+editor_options:
+  chunk_output_type: console
+---
+
+# Summary  
+
+Remove intended duplicates detected earlier.  
+Of each pair, remove the sample with smaller number of reads  
+(see read numbers in Excel file of 14Aug2018)  
+
+Removed 10 intentional duplicates:  
+40_S189_L007  
+76_S299_L008  
+234_S381_L008  
+244_S175_L007  
+348_S17_L007  
+398_S161_L007  
+436_S178_L007  
+518_S384_L008  
+527_S233_L007  
+539_S288_L008  
+
+Keep both samples in this pair: 280_S173_L007 - 281_S185_L007  
+Because this represents the same sample included twice:  
+once as case, and once as control (e-mail from Xiaolin of 29Aug2018)  
+
+Remove all 4 mixed-up samples:  
+270_S70_L007 - 351_S71_L007  
+386_S273_L008 - 391_S376_L008  
+
+37 non-polymorphic sites removed after the removal of samples.  
+
+Input data: 3,758 vars x 535 samples (265UBC + 270CBC)  
+Output data: 3,721 vars x 521 samples (260UBC + 261CBC)  
+
+# Start section
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+options(width = 999)
+```
+
+```{r}
+
+# Time stamp
+Sys.time()
+
+# Clenan-up
+rm(list=ls())
+graphics.off()
+
+# Memory
+gc()
+
+# Options
+options(stringsAsFactors = F,
+        warnPartialMatchArgs = T, 
+        warnPartialMatchAttr = T, 
+        warnPartialMatchDollar = T)
+
+# Files and folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s10_filter_samples")
+scripts_folder <- file.path(base_folder,"scripts","s10_filter_samples")
+setwd(scripts_folder)
+
+```
+
+# Read data
+
+```{r}
+
+# Load data
+load(file.path(base_folder,"data","s09_add_phenotypes","s03_add_phenotypes.RData"))
+
+# Update folders
+base_folder="/Users/alexey/Documents/wecare/final_analysis_2021/reanalysis_wo_danish_2021/ampliseq/s01_ampliseq_wecare_only"
+data_folder <- file.path(base_folder,"data","s10_filter_samples")
+scripts_folder <- file.path(base_folder,"scripts","s10_filter_samples")
+
+```
+
+# Check data
+
+```{r start_check}
+
+ls()
+
+dim(genotypes.mx)
+dim(phenotypes.df)
+dim(variants.df)
+
+sum(colnames(genotypes.mx) != rownames(phenotypes.df))
+sum(rownames(genotypes.mx) != rownames(variants.df))
+
+```
+
+# Make list of samples to remove  
+
+14 samples to remove:  
+- 10 intended duplicates to remove  
+- 4 samples mixed-up during pipetting  
+
+```{r}
+
+all_samples <- colnames(genotypes.mx)
+
+excluded_samples <- c("40_S189_L007","76_S299_L008","234_S381_L008",
+                      "244_S175_L007","348_S17_L007","398_S161_L007",
+                      "436_S178_L007","518_S384_L008","527_S233_L007",
+                      "539_S288_L008","270_S70_L007","351_S71_L007",
+                      "386_S273_L008","391_S376_L008")
+
+retained_samples <- ! all_samples %in% excluded_samples
+
+length(all_samples)
+length(excluded_samples)
+sum(retained_samples)
+
+rm(all_samples, retained_samples)
+
+```
+
+# Remove duplicated and mixed samples  
+
+```{r}
+
+# Remove samples
+genotypes.mx <- genotypes.mx[,!colnames(genotypes.mx) %in% excluded_samples]
+phenotypes.df <- phenotypes.df[!rownames(phenotypes.df) %in% excluded_samples,]
+
+# Check result
+sum(colnames(genotypes.mx) != rownames(phenotypes.df))
+dim(genotypes.mx)
+dim(phenotypes.df)
+
+# Clean-up
+rm(excluded_samples)
+
+```
+
+# Remove non-polymorphic sites  
+
+Remove 37 variants: 3,758 -> 3,721  
+
+```{r}
+
+# Function to detect uniform numeric vector
+uniformity_check.udf <- function(x){
+  if (all(is.na(x))){"All_NA"}
+  else if (min(x,na.rm=T)==max(x,na.rm=T)){"Uniform"}
+  else {"Non-Uniform"}}
+
+# Make the filter
+uniformity_check <- apply(genotypes.mx,1,uniformity_check.udf)
+summary(as.factor(uniformity_check))
+non_uniform_sites <- uniformity_check == "Non-Uniform"
+
+# Remove variants with uniform genotypes accross all samples
+genotypes.mx <- genotypes.mx[non_uniform_sites,]
+variants.df <- variants.df[non_uniform_sites,]
+
+# Check result
+dim(genotypes.mx)
+dim(variants.df)
+
+
+table(phenotypes.df$cc)
+table(phenotypes.df$danish)
+table(phenotypes.df[,c("cc","danish")])
+
+# Clean-up
+rm(uniformity_check.udf, uniformity_check, non_uniform_sites)
+
+```
+
+# Check data
+
+```{r}
+
+ls()
+
+dim(genotypes.mx)
+dim(phenotypes.df)
+dim(variants.df)
+
+sum(colnames(genotypes.mx) != rownames(phenotypes.df))
+sum(rownames(genotypes.mx) != rownames(variants.df))
+
+```
+
+# Save results
+
+```{r}
+
+save.image(file.path(data_folder, "s02_remove_duplicates.RData"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+gc()
+
+```

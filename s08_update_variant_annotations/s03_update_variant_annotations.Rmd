@@ -63,7 +63,6 @@ setwd(scripts_folder)
 
 # Libraries
 library(dplyr)
-#library(tidyr) # for separate (parsing of cDNA, CDC and prot positions)
 
 ```
 
